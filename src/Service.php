@@ -22,7 +22,7 @@ class Service extends \think\Service
     {
         // 增加命令
         $this->commands([
-            'thinkman' => Start::class,
+            'thinkman' => command\Start::class,
         ]);
     }
 }
