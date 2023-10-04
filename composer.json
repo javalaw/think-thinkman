@@ -1,0 +1,36 @@
+{
+    "name": "axguowen/think-thinkman",
+    "description": "A Simple Web Framework For ThinkPHP",
+    "keywords": [
+        "thinkman",
+        "web framework",
+        "thinkphp"
+    ],    
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "axguowen",
+            "email": "axguowen@qq.com"
+        }
+    ],
+    "require": {
+        "topthink/framework": "^6.1|^8.0",
+        "workerman/workerman": "^4.1",
+        "ext-fileinfo": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "think\\thinkman\\": "src"
+        }
+    },
+    "extra": {
+        "think":{
+            "services":[
+                "think\\thinkman\\Service"
+            ],
+            "config": {
+                "thinkman": "src/config.php"
+            }
+        }
+    }
+}
