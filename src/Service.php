@@ -14,11 +14,11 @@ namespace think\thinkman;
 class Service extends \think\Service
 {
     /**
-     * 服务启动
+     * 服务注册
      * @access public
 	 * @return void
      */
-    public function boot()
+    public function register()
     {
         // 增加命令
         $this->commands([
