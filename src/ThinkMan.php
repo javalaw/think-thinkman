@@ -38,7 +38,7 @@ class ThinkMan
 		// 日志文件路径
 		'log_file' => '',
 		// 最大请求数, 进程接收到该数量的请求后自动重启防止内存泄露
-		'max_request' => 10000,
+		'request_limit' => 10000,
 		// 静态文件支持
 		'static_support' => false,
 		// 文件监控配置(仅Linux下有效)
@@ -292,7 +292,7 @@ class ThinkMan
 
 		// 请求一定数量后，退出进程重开，防止内存溢出
 		static $requestCount;
-		if (++$requestCount > $this->options['max_request']) {
+		if (++$requestCount > $this->options['request_limit']) {
 			Worker::stopAll();
 		}
 	}
