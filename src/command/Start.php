@@ -43,6 +43,36 @@ class Start extends Command
      */
 	protected function execute(Input $input, Output $output)
 	{
+		// 需要启用的函数
+		$enableFunctions = [
+			'stream_socket_server',
+			'stream_socket_client',
+			'pcntl_signal_dispatch',
+			'pcntl_signal',
+			'pcntl_alarm',
+			'pcntl_fork',
+			'posix_getuid',
+			'posix_getpwuid',
+			'posix_kill',
+			'posix_setsid',
+			'posix_getpid',
+			'posix_getpwnam',
+			'posix_getgrnam',
+			'posix_getgid',
+			'posix_setgid',
+			'posix_initgroups',
+			'posix_setuid',
+			'posix_isatty',
+			'pcntl_wait'
+		];
+		// 当前禁用的函数
+		$disableFunctions = explode(',', ini_get('disable_functions'));
+		foreach ($enableFunctions as $item) {
+			if (in_array($item, $disableFunctions, true)) {
+				$output->writeln('<error>function [' . $item . '] not enabled, workerman failed to successfully start.</error>');
+				return;
+			}
+		}
 		// 获取当前参数
 		$action = $input->getArgument('action');
 		// 如果是linux系统
@@ -64,7 +94,7 @@ class Start extends Command
         }
 
 		if ('start' == $action) {
-            $output->writeln('Starting Workerman http server...');
+            $output->writeln('Starting thinkman...');
         }
 
 		// 获取当前配置

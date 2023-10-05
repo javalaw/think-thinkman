@@ -24,12 +24,23 @@ return [
 	'pid_file' => '',
 	// 日志文件路径
 	'log_file' => '',
-	// 是否开启PHP文件更改监控(仅Linux下有效)
-	'file_monitor_status' => false,
-	// 文件监控检测时间间隔(单位：秒)
-	'file_monitor_interval' => 2,
-	// 文件监控目录, 默认监控app和config目录
-	'file_monitor_paths' => [],
+	// 最大请求数, 进程接收到该数量的请求后自动重启防止内存泄露
+	'max_request' => 10000,
+	// 静态文件支持
+	'static_support' => false,
+	// 文件监控配置(仅Linux下有效)
+	'file_monitor' => [
+		// 是否开启文件监控
+		'enable' => false,
+		// 文件监控检测时间间隔(单位：秒)
+		'interval' => 2,
+		// 文件监控目录, 默认监控app和config目录
+		'paths' => [],
+		// 最大内存限制, 进程占用内存达到该数值后自动重启防止内存泄露
+		'memory_limit' => '128m',
+		// 锁文件路径
+		'lock_file' => '',
+	],
 	// Worker配置
 	'worker' => [
 		// 进程名称

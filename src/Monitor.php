@@ -22,10 +22,16 @@ class Monitor
      * @var array
      */
 	protected $options = [
-		// 监控间隔时间
+		// 是否开启文件监控
+		'enable' => false,
+		// 文件监控检测时间间隔(单位：秒)
 		'interval' => 2,
-		// 监控目录
+		// 文件监控目录, 默认监控app和config目录
 		'paths' => [],
+		// 最大内存, 进程占用内存达到该数值后自动重启防止内存泄露
+		'max_memory' => '128m',
+		// 锁文件路径
+		'lock_file' => '',
 	];
 
 	/**
@@ -35,8 +41,14 @@ class Monitor
 	protected $stop = false;
 
 	/**
-     * 配置参数
-     * @var Timer
+     * 文件锁
+     * @var string
+     */
+	protected $lockFile = '';
+
+	/**
+     * 定时器ID
+     * @var int
      */
 	protected $timer;
 
@@ -56,6 +68,10 @@ class Monitor
 	{
 		// 合并配置
 		$this->options = array_merge($this->options, $options);
+		// 如果锁文件为空
+		if(empty($this->options['lock_file'])){
+			$this->options['lock_file'] = App::getRuntimePath() . 'worker' . DIRECTORY_SEPARATOR . 'thinkman-monitor.lock';
+		}
 		// 实例化worker
 		$this->worker = new Worker();
 		$this->worker->name = 'thinkman-monitor';
@@ -67,11 +83,66 @@ class Monitor
 	/**
      * 启动回调
      * @access public
-     * @param array $options 参数
+     * @param Worker $worker
 	 * @return void
      */
-	public function onWorkerStart()
+	public function onWorkerStart(Worker $worker)
 	{
+		// 调试模式或者开启文件监控
+		if(App::isDebug() || true == $this->options['enable']){
+			// 监听文件变化
+			$this->listenFilesChange();
+		}
+
+		// 监听内存溢出
+		$this->listenMemory();
+	}
+
+	/**
+	 * 暂停监控
+     * @access protected
+	 * @return void
+	 */
+	protected function pause(): void
+	{
+		file_put_contents($this->options['lock_file'], time());
+	}
+
+	/**
+	 * 继续监控
+     * @access protected
+	 * @return void
+	 */
+	protected function resume(): void
+	{
+		clearstatcache();
+		if (is_file($this->options['lock_file'])) {
+			unlink($this->options['lock_file']);
+		}
+	}
+
+	/**
+	 * 监控是否已暂停
+     * @access protected
+	 * @return bool
+	 */
+	protected function isPaused(): bool
+	{
+		clearstatcache();
+		return file_exists($this->options['lock_file']);
+	}
+
+	/**
+	 * 监听文件变化
+     * @access protected
+	 * @return void
+	 */
+	protected function listenFilesChange(): void
+	{
+		if ($this->isPaused()) {
+			return;
+		}
+
 		// 监听间隔
 		$interval = $this->options['interval'];
 		if(empty($interval)){
@@ -117,6 +188,9 @@ class Monitor
 				foreach ($iterator as $file) {
 					$count++;
 					if (in_array($file->getExtension(), ['php', 'env'], true) && $lastMtime < $file->getMTime()) {
+						// 暂停监控
+						$this->pause();
+
 						if (!posix_kill(posix_getppid(), SIGUSR1)) {
 							echo '[monitor] require root user';
 							$this->stop = true;
@@ -133,6 +207,92 @@ class Monitor
 				if (!$tooManyFilesCheck && $count > 1000) {
 					echo '[monitor]: There are too many files (' . $count . ' files) in ' . $path . ' which makes file monitoring very slow';
 					$tooManyFilesCheck = 1;
+				}
+			}
+		});
+	}
+
+	/**
+	 * 获取最大内存限制
+     * @access protected
+	 * @return int|float
+	 */
+	protected function getMemoryLimit()
+	{
+		$usePhpIni = false;
+
+		$memoryLimit = $this->options['memory_limit'];
+		if ($memoryLimit === 0) {
+			return 0;
+		}
+
+		if (empty($memoryLimit)) {
+			$memoryLimit = ini_get('memory_limit');
+			$usePhpIni   = true;
+		}
+
+		if ($memoryLimit == -1) {
+			return 0;
+		}
+
+		$unit = strtolower($memoryLimit[strlen($memoryLimit) - 1]);
+		if ($unit === 'g') {
+			$memoryLimit = 1024 * (int)$memoryLimit;
+		} else if ($unit === 'm') {
+			$memoryLimit = (int)$memoryLimit;
+		} else if ($unit === 'k') {
+			$memoryLimit = ((int)$memoryLimit / 1024);
+		} else {
+			$memoryLimit = ((int)$memoryLimit / (1024 * 1024));
+		}
+		if ($memoryLimit < 30) {
+			$memoryLimit = 30;
+		}
+		if ($usePhpIni) {
+			$memoryLimit = (int)(0.8 * $memoryLimit);
+		}
+		return $memoryLimit;
+	}
+
+	/**
+	 * 监听内存泄露
+     * @access protected
+	 * @param int|float $memoryLimit
+	 * @return void
+	 */
+	protected function listenMemory($memoryLimit)
+	{
+		// 超出最大进程内存限制重启进程
+		$memoryLimit = $this->getMemoryLimit();
+		if(empty($memoryLimit)){
+			return;
+		}
+		
+		Timer::add(60, function() use ($memoryLimit){
+			// 如果暂停了
+			if ($this->isPaused() || $memoryLimit <= 0) {
+				return;
+			}
+			$ppid = posix_getppid();
+			$childrenFile = '/proc/' . $ppid . '/task/' . $ppid . '/children';
+			if (!is_file($childrenFile) || !($children = file_get_contents($childrenFile))) {
+				return;
+			}
+			foreach (explode(' ', $children) as $pid) {
+				$pid = (int)$pid;
+				$statusFile = '/proc/' . $pid . '/status';
+				if (!is_file($statusFile) || !($status = file_get_contents($statusFile))) {
+					continue;
+				}
+				$mem = 0;
+				if (preg_match('/VmRSS\s*?:\s*?(\d+?)\s*?kB/', $status, $match)) {
+					$mem = $match[1];
+				}
+				$mem = (int)($mem / 1024);
+				if ($mem >= $memoryLimit) {
+					// 暂停监控
+					$this->pause();
+					posix_kill($pid, SIGINT);
 				}
 			}
 		});

@@ -13,7 +13,7 @@ namespace think\thinkman;
 
 use think\facade\App as FacadeApp;
 use Workerman\Connection\TcpConnection;
-use Workerman\Protocols\Http\Request;
+use Workerman\Protocols\Http\Request as WorkerRequest;
 use Workerman\Worker;
 
 class ThinkMan
@@ -37,12 +37,21 @@ class ThinkMan
 		'pid_file' => '',
 		// 日志文件路径
 		'log_file' => '',
-		// 是否开启PHP文件更改监控(仅Linux下有效)
-		'file_monitor_status' => false,
-		// 文件监控检测时间间隔(单位：秒)
-		'file_monitor_interval' => 2,
-		// 文件监控目录, 默认监控app和config目录
-		'file_monitor_paths' => [],
+		// 最大请求数, 进程接收到该数量的请求后自动重启防止内存泄露
+		'max_request' => 10000,
+		// 静态文件支持
+		'static_support' => false,
+		// 文件监控配置(仅Linux下有效)
+		'file_monitor' => [
+			// 是否开启文件监控
+			'enable' => false,
+			// 文件监控检测时间间隔(单位：秒)
+			'interval' => 2,
+			// 文件监控目录, 默认监控app和config目录
+			'paths' => [],
+			// 最大内存, 进程占用内存达到该数值后自动重启防止内存泄露
+			'memory_limit' => '128m',
+		],
 		// Worker配置
 		'worker' => []
 	];
@@ -207,11 +216,8 @@ class ThinkMan
         }
 
 		// 开启监控
-		if (DIRECTORY_SEPARATOR !== '\\' && (FacadeApp::isDebug() || true == $this->options['file_monitor_status'])) {
-			$monitor = new Monitor([
-				'interval' => $this->options['file_monitor_interval'],
-				'paths' => $this->options['file_monitor_paths'],
-			]);
+		if (DIRECTORY_SEPARATOR !== '\\') {
+			$monitor = new Monitor($this->options['file_monitor']);
 		}
 
 		Worker::runAll();
@@ -242,10 +248,11 @@ class ThinkMan
 		// 设置worker实例
 		$this->app->setWorker($worker);
 		// 设置响应实例
-		$this->app->setWorkerResponse(new Response());
+		$this->app->setWorkerResponse(app(Response::class));
 		// 容器绑定
 		$this->app->bind([
 			'think\Cookie' => Cookie::class,
+			'think\Request' => Request::class
 		]);
 	}
 
@@ -253,15 +260,15 @@ class ThinkMan
      * 接收请求回调
      * @access public
 	 * @param TcpConnection $connection
-	 * @param Request $request
+	 * @param WorkerRequest $request
 	 * @return void
      */
-	public function onMessage(TcpConnection $connection, Request $request): void
+	public function onMessage(TcpConnection $connection, WorkerRequest $request): void
 	{
 		// 访问资源文件
 		$file = $this->publicPath . DIRECTORY_SEPARATOR . $request->uri();
-		// 文件存在
-		if (is_file($file)) {
+		// 启用静态文件支持且文件存在
+		if ($this->options['static_support'] && is_file($file)) {
 			// 检查if-modified-since头判断文件是否修改过
 			if (!empty($if_modified_since = $request->header('if-modified-since'))) {
 				$modified_time = date('D, d M Y H:i:s', filemtime($file)) . ' ' . \date_default_timezone_get();
@@ -281,6 +288,12 @@ class ThinkMan
 		// 执行app逻辑
 		else {
 			$this->app->worker($connection, $request);
+		}
+
+		// 请求一定数量后，退出进程重开，防止内存溢出
+		static $requestCount;
+		if (++$requestCount > $this->options['max_request']) {
+			Worker::stopAll();
 		}
 	}
 

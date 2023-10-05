@@ -26,6 +26,12 @@ class App extends \think\App
 	protected $worker;
 
 	/**
+	 * Request实例
+	 * @var Request
+	 */
+	protected $workerRequest;
+
+	/**
 	 * Response实例
 	 * @var Response
 	 */
@@ -46,6 +52,10 @@ class App extends \think\App
 			$this->beginMem  = memory_get_usage();
 			// 初始化数据库
 			$this->db->clearQueryTimes();
+
+			// 兼容 php://input
+			$this->workerRequest = $request;
+			$this->request->_wmSetRawInput($request->rawBody());
 
 			$this->makeGlobal($connection, $request);
 
