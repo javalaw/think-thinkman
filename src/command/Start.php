@@ -17,6 +17,7 @@ use think\console\input\Argument;
 use think\console\input\Option;
 use think\console\Output;
 use think\thinkman\ThinkMan;
+use Workerman\Worker;
 
 class Start extends Command
 {
@@ -78,7 +79,7 @@ class Start extends Command
 		// 如果是linux系统
 		if (DIRECTORY_SEPARATOR !== '\\') {
             if (!in_array($action, ['start', 'stop', 'reload', 'restart', 'status', 'connections'])) {
-                $output->writeln('<error>Invalid argument action:{$action}, Expected start|stop|restart|reload|status|connections .</error>');
+                $output->writeln('<error>Invalid argument action:' . $action . ', Expected start|stop|restart|reload|status|connections.</error>');
                 return false;
             }
 
@@ -89,12 +90,16 @@ class Start extends Command
         }
 		// windows只支持start方法
 		elseif ('start' != $action) {
-            $output->writeln('<error>Not Support action:{$action} on Windows.</error>');
+            $output->writeln('<error>Not Support action:' . $action . ' on Windows.</error>');
             return false;
         }
 
 		if ('start' == $action) {
             $output->writeln('Starting thinkman...');
+        }
+
+		if ($this->input->hasOption('daemon')) {
+            Worker::$daemonize = true;
         }
 
 		// 获取当前配置

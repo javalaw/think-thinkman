@@ -92,7 +92,7 @@ class ThinkMan
      * @param array $options 参数
 	 * @return void
      */
-	public function __construct($options = [])
+	public function __construct(array $options = [])
 	{
 		// 合并配置
 		$this->options = array_merge($this->options, $options);
@@ -164,6 +164,11 @@ class ThinkMan
 		}
 		// 指定日志文件路径
 		Worker::$logFile = $this->options['log_file'];
+
+		// 守护进程启动
+		if (true === $this->options['daemonize']) {
+            Worker::$daemonize = true;
+        }
 	}
 
 	/**
