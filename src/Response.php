@@ -13,22 +13,21 @@ namespace think\thinkman;
 
 class Response extends \Workerman\Protocols\Http\Response
 {
-	/**
+    /**
      * 动态设置响应头
      * @access public
-	 * @param array $headers
-	 * @param bool $merge
-	 * @return $this
+     * @param array $headers
+     * @param bool $merge
+     * @return $this
      */
-	public function withHeaders($headers, bool $merge = false)
-	{
-		if ($merge) {
-			parent::withHeaders($headers);
-		}
-		else {
-			$this->_header = $headers;
-		}
+    public function withHeaders($headers, bool $merge = false)
+    {
+        if ($merge) {
+            parent::withHeaders($headers);
+        } else {
+            $this->_header = $headers;
+        }
 
-		return $this;
-	}
+        return $this;
+    }
 }

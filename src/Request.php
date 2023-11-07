@@ -13,13 +13,13 @@ namespace think\thinkman;
 
 class Request extends \think\Request
 {
-	public function _wmSetRawInput($input)
-	{
-		$this->input = $input;
-	}
+    public function _wmSetRawInput($input)
+    {
+        $this->input = $input;
+    }
 
-	public function getInput(): string
-	{
-		return app('workermanRequest')->rawBody();
-	}
+    public function getInput(): string
+    {
+        return app('workermanRequest')->rawBody();
+    }
 }

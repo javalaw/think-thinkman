@@ -16,7 +16,7 @@ class Service extends \think\Service
     /**
      * 服务注册
      * @access public
-	 * @return void
+     * @return void
      */
     public function register()
     {
