@@ -262,6 +262,22 @@ class ThinkMan
     }
 
     /**
+     * 判断文件是否是允许的文件
+     * @param string $file 文件
+     * @return bool 是否允许
+     */
+    protected function allowFile(string $file)
+    {
+        $fileInfo = pathinfo($file);
+        $isHidden = (substr($fileInfo['basename'], 0, 1) === '.');
+        $extension = strtolower($fileInfo['extension']);
+        if(is_dir($file) || $isHidden || $extension === 'php') {
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * 接收请求回调
      * @access public
      * @param TcpConnection $connection
@@ -274,6 +290,10 @@ class ThinkMan
         $file = $this->publicPath . DIRECTORY_SEPARATOR . $request->uri();
         // 启用静态文件支持且文件存在
         if ($this->options['static_support'] && is_file($file)) {
+            if (!$this->allowFile($file)) {
+                $connection->send(new \Workerman\Protocols\Http\Response(404));
+                return;
+            }
             // 检查if-modified-since头判断文件是否修改过
             if (!empty($if_modified_since = $request->header('if-modified-since'))) {
                 $modified_time = date('D, d M Y H:i:s', filemtime($file)) . ' ' . \date_default_timezone_get();
