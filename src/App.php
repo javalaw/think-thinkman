@@ -11,6 +11,10 @@
 
 namespace think\thinkman;
 
+use think\exception\FuncNotFoundException;
+use ReflectionException;
+use InvalidArgumentException;
+use think\exception\ClassNotFoundException;
 use think\exception\Handle;
 use think\exception\HttpException;
 use think\helper\Arr;
@@ -25,12 +29,6 @@ class App extends \think\App
      * @var Worker
      */
     protected $worker;
-
-    /**
-     * Request实例
-     * @var Request
-     */
-    protected $workerRequest;
 
     /**
      * Response实例
@@ -55,8 +53,7 @@ class App extends \think\App
             $this->db->clearQueryTimes();
 
             // 兼容 php://input
-            $this->workerRequest = $rawRequest;
-            $request = $this->prepareRequest($connection, $this->workerRequest);
+            $request = $this->prepareRequest($connection, $rawRequest);
 
             // 解决第二次刷新识别应用不正确的bug
             $this->http->name('');
@@ -88,7 +85,7 @@ class App extends \think\App
             }
 
             $keepAlive = $request->header('connection');
-            if (($keepAlive === null && $request->protocolVersion() === '1.1') || strtolower($keepAlive) === 'keep-alive') {
+            if (($keepAlive === null && $rawRequest->protocolVersion() === '1.1') || strtolower($keepAlive) === 'keep-alive') {
                 // 响应
                 $response = $this->workerResponse
                     ->withStatus($response->getCode())
@@ -165,46 +162,22 @@ class App extends \think\App
     }
 
     /**
-     * 兼容PHP-FPM框架
-     * @param TcpConnection $connection
-     * @param Request $request
-     * @return void
+     * prepare think Request
+     * @param TcpConnection $connection connection
+     * @param Request $rawRequest workman request
+     * @return \think\Request 
+     * @throws FuncNotFoundException 
+     * @throws ReflectionException 
+     * @throws InvalidArgumentException 
+     * @throws ClassNotFoundException 
      */
-    protected function makeGlobal(TcpConnection $connection, Request $request): void
-    {
-        global $_GET, $_POST, $_COOKIE, $_REQUEST, $_FILES, $_SERVER;
-
-        $_GET = $request->get();
-        $_POST = $request->post();
-        $_COOKIE = $request->cookie();
-        $_REQUEST = [...$_GET, ...$_POST, ...$_COOKIE];
-        $_FILES = $request->file();
-
-        $_SERVER = array_merge($_SERVER, [
-            'QUERY_STRING' => $request->queryString(),
-            'REQUEST_METHOD' => $request->method(),
-            'REQUEST_URI' => $request->uri(),
-            'SERVER_PROTOCOL' => 'HTTP/' . $request->protocolVersion(),
-            'SERVER_SOFTWARE' => $this->worker->name,
-            'SERVER_NAME' => $request->host(true),
-            'HTTP_HOST' => $request->host(),
-            'HTTP_USER_AGENT' => $request->header('user-agent'),
-            'HTTP_ACCEPT' => $request->header('accept'),
-            'HTTP_ACCEPT_LANGUAGE' => $request->header('accept-language'),
-            'HTTP_ACCEPT_ENCODING' => $request->header('accept-encoding'),
-            'HTTP_COOKIE' => $request->header('cookie'),
-            'HTTP_CONNECTION' => $request->header('connection'),
-            'CONTENT_TYPE' => $request->header('content-type'),
-            'REMOTE_ADDR' => $connection->getRemoteIp(),
-            'REMOTE_PORT' => $connection->getRemotePort(),
-            'CONTENT_LENGTH' => $request->header('content-length'),
-            'REQUEST_TIME' => time()
-        ]);
-    }
-
     protected function prepareRequest(TcpConnection $connection, Request $rawRequest)
     {
         $header = $rawRequest->header() ?: [];
+        $servers = [];
+        foreach($header as $key => $val) {
+            $servers['http_' . str_replace('-', '_', strtolower($key))] = $val;
+        }
         $servers = [
             'query_string' => $rawRequest->queryString(),
             'request_method' => $rawRequest->method(),
@@ -224,6 +197,7 @@ class App extends \think\App
             'remote_port' => $connection->getRemotePort(),
             'content_length' => $rawRequest->header('content-length'),
             'request_time' => time(),
+            ...$servers,
         ];
         $request = $this->make(\think\Request::class, [], true);
         $request->withHeader($header)
@@ -240,6 +214,11 @@ class App extends \think\App
         return $request;
     }
 
+    /**
+     * get files from workerman request
+     * @param Request $rawRequest raw request
+     * @return array<array-key, mixed> 
+     */
     protected function getFiles(Request $rawRequest)
     {
         if (empty($rawRequest->file())) {
