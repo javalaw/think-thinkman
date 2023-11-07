@@ -230,6 +230,7 @@ class App extends \think\App
             ->withServer($servers)
             ->withGet($rawRequest->get() ?: [])
             ->withPost($rawRequest->post() ?: [])
+            ->withRequest([...$rawRequest->get(), ...$rawRequest->post()])
             ->withCookie($rawRequest->cookie() ?: [])
             ->withFiles($this->getFiles($rawRequest))
             ->withInput($rawRequest->rawBody())

@@ -13,13 +13,9 @@ namespace think\thinkman;
 
 class Request extends \think\Request
 {
-    public function _wmSetRawInput($input)
+    public function withRequest(array $request)
     {
-        $this->input = $input;
-    }
-
-    public function getInput(): string
-    {
-        return app('workermanRequest')->rawBody();
+        $this->request = $request;
+        return $this;
     }
 }
