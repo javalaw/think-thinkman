@@ -90,7 +90,7 @@ class App extends \think\App
                 $response = $this->workerResponse
                     ->withStatus($response->getCode())
                     ->withHeaders($header)
-                    ->withBody($content);
+                    ->withBody($response->getContent());
                 $connection->send($response);
             } else {
                 $connection->close($content);
