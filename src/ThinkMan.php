@@ -42,13 +42,15 @@ class ThinkMan
         // 静态文件支持
         'static_support' => false,
         // 文件监控配置(仅Linux下有效)
-        'file_monitor' => [
+        'monitor' => [
             // 是否开启文件监控
             'enable' => false,
             // 文件监控检测时间间隔(单位：秒)
             'interval' => 2,
             // 文件监控目录, 默认监控app和config目录
             'paths' => [],
+            // 文件扩展名目录，默认php和env
+            'extensions' => [],
             // 最大内存, 进程占用内存达到该数值后自动重启防止内存泄露
             'memory_limit' => '128m',
         ],
@@ -95,7 +97,7 @@ class ThinkMan
     public function __construct(array $options = [])
     {
         // 合并配置
-        $this->options = array_merge($this->options, $options);
+        $this->options = array_replace_recursive($this->options, $options);
         // 实例化worker
         $this->worker = new Worker('http://' . $this->options['host'] . ':' . $this->options['port'], $this->options['context']);
         // 初始化
@@ -222,7 +224,7 @@ class ThinkMan
 
         // 开启监控
         if (DIRECTORY_SEPARATOR !== '\\') {
-            $monitor = new Monitor($this->options['file_monitor']);
+            $monitor = new Monitor($this->options['monitor']);
         }
 
         Worker::runAll();
