@@ -44,6 +44,7 @@ class App extends \think\App
      */
     public function worker(TcpConnection $connection, Request $rawRequest): void
     {
+        $this->instance(TcpConnection::class, $connection);
         try {
             // 开始时间
             $this->beginTime = microtime(true);
@@ -200,6 +201,11 @@ class App extends \think\App
             ...$servers,
         ];
         $request = $this->make(\think\Request::class, [], true);
+        $pathInfo = ltrim($rawRequest->path(), '/');
+        $infos = explode('/', $pathInfo);
+        if($infos[0] && $infos[0] == 'index.php') {
+            $pathInfo = ltrim(substr($pathInfo, strlen('index.php')), '/');
+        }
         $request->withHeader($header)
             ->withServer($servers)
             ->withGet($rawRequest->get() ?: [])
@@ -210,7 +216,7 @@ class App extends \think\App
             ->withInput($rawRequest->rawBody())
             ->setBaseUrl($rawRequest->path())
             ->setUrl($rawRequest->uri())
-            ->setPathinfo(ltrim($rawRequest->path(), '/'));
+            ->setPathinfo($pathInfo);
         return $request;
     }
 
