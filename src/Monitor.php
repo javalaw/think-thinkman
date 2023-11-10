@@ -129,7 +129,9 @@ class Monitor
                 // 监听文件变化
                 $this->addTimer($this->options['interval'], [$this, 'checkAllFilesChange']);
                 // 监听内存溢出
-                $this->addTimer(60, [$this, 'listenMemory']);
+                $this->addTimer(60, function() {
+                    $this->listenMemory($this->memoryLimit);
+                });
             }
         }
     }
@@ -184,7 +186,7 @@ class Monitor
      * 检查所有文件
      * @return bool 
      */
-    protected function checkAllFilesChange(): bool
+    public function checkAllFilesChange(): bool
     {
         if ($this->isPaused()) {
             return false;
@@ -293,11 +295,11 @@ class Monitor
 
     /**
      * 监听内存泄露
-     * @access protected
+     * @access public
      * @param int|float $memoryLimit
      * @return void
      */
-    protected function listenMemory(int $memoryLimit)
+    public function listenMemory(int $memoryLimit)
     {
         // 如果暂停了
         if ($this->isPaused() || $memoryLimit <= 0) {

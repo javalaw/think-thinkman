@@ -41,6 +41,8 @@ class ThinkMan
         'request_limit' => 10000,
         // 静态文件支持
         'static_support' => false,
+        // 静态文件索引
+        'static_index' => [],
         // 文件监控配置(仅Linux下有效)
         'monitor' => [
             // 是否开启文件监控
@@ -55,7 +57,14 @@ class ThinkMan
             'memory_limit' => '128m',
         ],
         // Worker配置
-        'worker' => []
+        'worker' => [],
+        'hooks' => [
+            'beforeWorkerStart' => null,
+            'afterWorkerStart' => null,
+            'beforeWorkerRequest' => null,
+            'beforeWorkerMessage' => null,
+            'afterWorkerMessage' => null,
+        ],
     ];
 
     /**
@@ -241,6 +250,90 @@ class ThinkMan
     }
 
     /**
+     * 调用hooks
+     * @param string $event 
+     * @return bool 是否继续处理 
+     */
+    protected function callHooks(string $event): bool
+    {
+        if (isset($this->options['hooks'][$event])) {
+            return call_user_func($this->options['hooks'][$event], $this->app);
+        }
+        return true;
+    }
+    /**
+     * 判断文件是否是允许的文件
+     * @param string $file 文件
+     * @return bool 是否允许
+     */
+    private function allowFile(string $file)
+    {
+        $fileInfo = pathinfo($file);
+        $isHidden = (substr($fileInfo['basename'], 0, 1) === '.');
+        $extension = strtolower($fileInfo['extension']);
+        if (is_dir($file) || $isHidden || $extension === 'php') {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 检查文件是否过期
+     * @param string $file 
+     * @return void 
+     */
+    private function notModifiedSince(string $file, WorkerRequest $request)
+    {
+        $ifModifiedSince = $request->header('if-modified-since');
+        if ($ifModifiedSince === null || !is_file($file) || !($mtime = filemtime($file))) {
+            return false;
+        }
+
+        return $ifModifiedSince === gmdate('D, d M Y H:i:s', $mtime) . ' GMT';
+    }
+
+    /**
+     * 静态文件处理
+     * @param TcpConnection $connection 
+     * @param Request $rawRequest 
+     * @return bool 
+     */
+    private function handleStaticRequest(TcpConnection $connection, WorkerRequest $rawRequest): bool
+    {
+        $indexes = $this->options['static_index'] ?: ['index.html'];
+        // 访问资源文件
+        $file = $this->publicPath . DIRECTORY_SEPARATOR . $rawRequest->path();
+        $files = [$file];
+        foreach ($indexes as $index) {
+            $files[] = rtrim($file, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $index;
+        }
+        foreach ($files as $file) {
+            clearstatcache(true, $file);
+            // 启用静态文件支持且文件存在
+            if (is_file($file)) {
+
+                if (!$this->allowFile($file)) {
+                    $connection->send(new \Workerman\Protocols\Http\Response(404));
+                    return true;
+                }
+                // 检查if-modified-since头判断文件是否修改过
+                if ($this->notModifiedSince($file, $rawRequest)) {
+                    $connection->send(new \Workerman\Protocols\Http\Response(304));
+                    return true;
+                }
+
+                // 文件修改过或者没有if-modified-since头则发送文件
+                $response = (new \Workerman\Protocols\Http\Response(200, [
+                    'Server' => $this->worker->name,
+                ]))->withFile($file);
+                $connection->send($response);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 启动回调
      * @access public
      * @param Worker $worker
@@ -248,35 +341,20 @@ class ThinkMan
      */
     public function onWorkerStart(Worker $worker): void
     {
+
+        $this->callHooks('beforeWorkerStart');
         // 实例化应用容器
         $this->app = new App($this->rootPath);
         // 初始化
         $this->app->initialize();
         // 设置worker实例
         $this->app->setWorker($worker);
-        // 设置响应实例
-        $this->app->setWorkerResponse(app(Response::class));
         // 容器绑定
         $this->app->bind([
             'think\Cookie' => Cookie::class,
             'think\Request' => Request::class
         ]);
-    }
-
-    /**
-     * 判断文件是否是允许的文件
-     * @param string $file 文件
-     * @return bool 是否允许
-     */
-    protected function allowFile(string $file)
-    {
-        $fileInfo = pathinfo($file);
-        $isHidden = (substr($fileInfo['basename'], 0, 1) === '.');
-        $extension = strtolower($fileInfo['extension']);
-        if(is_dir($file) || $isHidden || $extension === 'php') {
-            return false;
-        }
-        return true;
+        $this->callHooks('afterWorkerStart');
     }
 
     /**
@@ -288,34 +366,20 @@ class ThinkMan
      */
     public function onMessage(TcpConnection $connection, WorkerRequest $request): void
     {
-        // 访问资源文件
-        $file = $this->publicPath . DIRECTORY_SEPARATOR . $request->uri();
-        // 启用静态文件支持且文件存在
-        if ($this->options['static_support'] && is_file($file)) {
-            if (!$this->allowFile($file)) {
-                $connection->send(new \Workerman\Protocols\Http\Response(404));
-                return;
-            }
-            // 检查if-modified-since头判断文件是否修改过
-            if (!empty($if_modified_since = $request->header('if-modified-since'))) {
-                $modified_time = date('D, d M Y H:i:s', filemtime($file)) . ' ' . \date_default_timezone_get();
-                // 文件未修改则返回304
-                if ($modified_time === $if_modified_since) {
-                    $connection->send(new \Workerman\Protocols\Http\Response(304));
-                    return;
-                }
-            }
+        $this->app->instance(TcpConnection::class, $connection);
+        $this->app->instance(WorkerRequest::class, $request);
+        $response = app(Response::class, newInstance: true);
+        $this->app->instance(Response::class, $response);
+         // 设置响应实例
+         $this->app->setWorkerResponse($response);
+        $this->callHooks('beforeWorkerMessage');
 
-            // 文件修改过或者没有if-modified-since头则发送文件
-            $response = (new \Workerman\Protocols\Http\Response(200, [
-                'Server' => $this->worker->name,
-            ]))->withFile($file);
-            $connection->send($response);
-        } // 执行app逻辑
-        else {
-            $this->app->worker($connection, $request);
+        if (!$this->handleStaticRequest($connection, $request)) {
+            if ($this->callHooks('beforeWorkerRequest')) {
+                $this->app->worker($connection, $request);
+            }
         }
-
+        $this->callHooks('afterWorkerMessage');
         // 请求一定数量后，退出进程重开，防止内存溢出
         static $requestCount;
         if (++$requestCount > $this->options['request_limit']) {

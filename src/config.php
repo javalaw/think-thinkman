@@ -28,6 +28,8 @@ return [
     'request_limit' => 10000,
     // 静态文件支持
     'static_support' => false,
+    // 静态文件index
+    'static_index' => [],
     // 文件监控配置(仅Linux下有效)
     'monitor' => [
         // 是否开启文件监控

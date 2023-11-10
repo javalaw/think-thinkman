@@ -28,6 +28,6 @@ class Cookie extends \think\Cookie
      */
     protected function saveCookie(string $name, string $value, int $expire, string $path, string $domain, bool $secure, bool $httponly, string $samesite): void
     {
-        app('workermanResponse')->cookie($name, $value, null, $path, $domain, $secure, $httponly, $samesite);
+        app(Response::class)->cookie($name, $value, null, $path, $domain, $secure, $httponly, $samesite);
     }
 }

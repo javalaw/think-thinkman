@@ -44,7 +44,6 @@ class App extends \think\App
      */
     public function worker(TcpConnection $connection, Request $rawRequest): void
     {
-        $this->instance(TcpConnection::class, $connection);
         try {
             // 开始时间
             $this->beginTime = microtime(true);
@@ -96,8 +95,7 @@ class App extends \think\App
             } else {
                 $connection->close($content);
             }
-
-        } catch (HttpException|\Exception|\Throwable $e) {
+        } catch (HttpException | \Exception | \Throwable $e) {
             $this->exception($connection, $e);
         }
     }
@@ -176,7 +174,7 @@ class App extends \think\App
     {
         $header = $rawRequest->header() ?: [];
         $servers = [];
-        foreach($header as $key => $val) {
+        foreach ($header as $key => $val) {
             $servers['http_' . str_replace('-', '_', strtolower($key))] = $val;
         }
         $servers = [
@@ -203,7 +201,7 @@ class App extends \think\App
         $request = $this->make(\think\Request::class, [], true);
         $pathInfo = ltrim($rawRequest->path(), '/');
         $infos = explode('/', $pathInfo);
-        if($infos[0] && $infos[0] == 'index.php') {
+        if ($infos[0] && $infos[0] == 'index.php') {
             $pathInfo = ltrim(substr($pathInfo, strlen('index.php')), '/');
         }
         $request->withHeader($header)
