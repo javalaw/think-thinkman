@@ -237,10 +237,12 @@ class Monitor
                     continue;
                 }
                 // 暂停监控
-                $this->pause();
+               
                 echo '[monitor:update]' . $file . " update and reload\n";
                 if (DIRECTORY_SEPARATOR === '/') {
+                    $this->pause();
                     posix_kill(posix_getppid(), SIGUSR1);
+                    $this->resume();
                 } else {
                     return true;
                 }
@@ -325,6 +327,7 @@ class Monitor
                 // 暂停监控
                 $this->pause();
                 posix_kill($pid, SIGINT);
+                $this->resume();
             }
         }
     }
