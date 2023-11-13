@@ -11,7 +11,9 @@
 
 namespace think\thinkman;
 
+use RuntimeException;
 use think\facade\App as FacadeApp;
+use think\thinkman\contracts\Resetter;
 use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http\Request as WorkerRequest;
 use Workerman\Worker;
@@ -64,6 +66,12 @@ class ThinkMan
             'beforeWorkerRequest' => null,
             'beforeWorkerMessage' => null,
             'afterWorkerMessage' => null,
+        ],
+        'resets' => [
+
+        ],
+        'resetters' => [
+
         ],
     ];
 
@@ -370,8 +378,8 @@ class ThinkMan
         $this->app->instance(WorkerRequest::class, $request);
         $response = app(Response::class, newInstance: true);
         $this->app->instance(Response::class, $response);
-         // 设置响应实例
-         $this->app->setWorkerResponse($response);
+        // 设置响应实例
+        $this->app->setWorkerResponse($response);
         $this->callHooks('beforeWorkerMessage');
 
         if (!$this->handleStaticRequest($connection, $request)) {
@@ -380,10 +388,31 @@ class ThinkMan
             }
         }
         $this->callHooks('afterWorkerMessage');
+        $this->reset();
         // 请求一定数量后，退出进程重开，防止内存溢出
         static $requestCount;
-        if (++$requestCount > $this->options['request_limit']) {
-            Worker::stopAll();
+        if (($this->options['request_limit'] > 0) && (++$requestCount > $this->options['request_limit'])) {
+            posix_kill(posix_getpid(), SIGUSER1);
+        }
+    }
+
+    /**
+     * 清理app实例中的绑定
+     * @return void
+     */
+    public function reset(): void
+    {
+        foreach ($this->options['resets'] as $reset) {
+            $this->app->delete($reset);
+        }
+
+        foreach ($this->options['resetters'] as $resetter) {
+            if (in_array(Resetter::class, class_implements($resetter))) {
+                $resetterInstance = $this->app->make($resetter);
+                $resetterInstance->reset();
+            } else {
+                throw new RuntimeException('resetter must be instance of Resetter:' . $resetter);
+            }
         }
     }
 
